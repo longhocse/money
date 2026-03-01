@@ -1,0 +1,16 @@
+# Node modules
+node_modules/
+
+# Environment variables
+.env
+
+# Build folders
+dist/
+build/
+
+# Logs
+logs
+*.log
+
+# Vercel
+.vercel
