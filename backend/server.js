@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const sql = require("mssql");
+const axios = require("axios");
 
 const app = express();
 app.use(cors());
@@ -11,8 +12,8 @@ app.use(express.json());
 ======================== */
 
 const config = {
-  user: "sa",              // đổi theo máy m
-  password: "1234",      // đổi password SQL Server
+  user: "sa",
+  password: "1234",
   server: "localhost",
   database: "MoneyManager",
   options: {
@@ -22,6 +23,16 @@ const config = {
 };
 
 /* ========================
+   KẾT NỐI 1 LẦN DUY NHẤT
+======================== */
+
+sql.connect(config).then(() => {
+  console.log("✅ Connected SQL Server");
+}).catch(err => {
+  console.log("❌ SQL ERROR:", err);
+});
+
+/* ========================
    THÊM GIAO DỊCH
 ======================== */
 
@@ -29,40 +40,25 @@ app.post("/transactions", async (req, res) => {
   try {
     const { type, amount, purpose, source, date } = req.body;
 
-    await sql.connect(config);
-
     await sql.query`
       INSERT INTO Transactions (Type, Amount, Purpose, Source, TransactionDate)
       VALUES (${type}, ${amount}, ${purpose}, ${source}, ${date})
     `;
 
     res.json({ message: "Thêm thành công" });
-
   } catch (err) {
     res.status(500).send(err);
   }
 });
 
 /* ========================
-   LẤY DANH SÁCH + LỌC
+   LẤY DANH SÁCH
 ======================== */
 
 app.get("/transactions", async (req, res) => {
   try {
-    const { year, month, day } = req.query;
-
-    await sql.connect(config);
-
-    let query = "SELECT * FROM Transactions WHERE 1=1";
-
-    if (year) query += ` AND YEAR(TransactionDate) = ${year}`;
-    if (month) query += ` AND MONTH(TransactionDate) = ${month}`;
-    if (day) query += ` AND DAY(TransactionDate) = ${day}`;
-
-    const result = await sql.query(query);
-
+    const result = await sql.query("SELECT * FROM Transactions");
     res.json(result.recordset);
-
   } catch (err) {
     res.status(500).send(err);
   }
@@ -74,8 +70,6 @@ app.get("/transactions", async (req, res) => {
 
 app.get("/summary", async (req, res) => {
   try {
-    await sql.connect(config);
-
     const result = await sql.query(`
       SELECT 
         SUM(CASE WHEN Type = N'Thu' THEN Amount ELSE 0 END) AS TotalThu,
@@ -84,7 +78,6 @@ app.get("/summary", async (req, res) => {
     `);
 
     res.json(result.recordset[0]);
-
   } catch (err) {
     res.status(500).send(err);
   }
@@ -95,24 +88,21 @@ app.get("/balance-by-source", async (req, res) => {
     const result = await sql.query(`
       SELECT 
         Source,
-        SUM(CASE 
-              WHEN Type = N'Thu' THEN Amount 
-              ELSE -Amount 
-            END) AS Balance
+        SUM(CASE WHEN Type = N'Thu' THEN Amount ELSE -Amount END) AS Balance
       FROM Transactions
       GROUP BY Source
     `);
 
     res.json(result.recordset);
-
   } catch (err) {
-    console.log("🔥 ERROR:", err);
     res.status(500).send("Server Error");
   }
 });
+
 /* ========================
    DELETE
 ======================== */
+
 app.delete("/transactions/:id", async (req, res) => {
   try {
     await sql.query`
@@ -120,13 +110,14 @@ app.delete("/transactions/:id", async (req, res) => {
     `;
     res.json({ message: "Deleted successfully" });
   } catch (err) {
-    console.log("🔥 ERROR:", err);
     res.status(500).send("Server Error");
   }
 });
+
 /* ========================
    UPDATE
 ======================== */
+
 app.put("/transactions/:id", async (req, res) => {
   try {
     const { type, amount, purpose, source, date } = req.body;
@@ -143,8 +134,12 @@ app.put("/transactions/:id", async (req, res) => {
 
     res.json({ message: "Updated successfully" });
   } catch (err) {
-    console.log("🔥 ERROR:", err);
     res.status(500).send("Server Error");
   }
 });
-app.listen(5000, () => console.log("🔥 Server chạy tại http://localhost:5000"));
+
+
+
+app.listen(5000, () => {
+  console.log("🔥 Server chạy tại http://localhost:5000");
+});
