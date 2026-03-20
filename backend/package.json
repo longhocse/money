@@ -1,16 +1,20 @@
 {
-  "name": "money-api",
+  "name": "backend",
   "version": "1.0.0",
-  "description": "Money Manager Backend",
-  "main": "server.js",
-  "type": "module",
+  "description": "",
+  "main": "index.js",
   "scripts": {
-    "start": "node server.js"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
   "dependencies": {
     "@supabase/supabase-js": "^2.99.3",
     "axios": "^1.13.6",
     "cors": "^2.8.6",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "mssql": "^12.2.0"
   }
-}
+} 
