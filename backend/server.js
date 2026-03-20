@@ -1,145 +1,130 @@
-const express = require("express");
-const cors = require("cors");
-const sql = require("mssql");
-const axios = require("axios");
+import express from "express";
+import cors from "cors";
+import { createClient } from "@supabase/supabase-js";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-/* ========================
-   CẤU HÌNH SQL SERVER
-======================== */
+// ========================
+// SUPABASE CONFIG
+// ========================
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_KEY
+);
 
-const config = {
-  user: "sa",
-  password: "1234",
-  server: "localhost",
-  database: "MoneyManager",
-  options: {
-    encrypt: false,
-    trustServerCertificate: true
-  }
-};
-
-/* ========================
-   KẾT NỐI 1 LẦN DUY NHẤT
-======================== */
-
-sql.connect(config).then(() => {
-  console.log("✅ Connected SQL Server");
-}).catch(err => {
-  console.log("❌ SQL ERROR:", err);
-});
-
-/* ========================
-   THÊM GIAO DỊCH
-======================== */
-
-app.post("/transactions", async (req, res) => {
-  try {
-    const { type, amount, purpose, source, date } = req.body;
-
-    await sql.query`
-      INSERT INTO Transactions (Type, Amount, Purpose, Source, TransactionDate)
-      VALUES (${type}, ${amount}, ${purpose}, ${source}, ${date})
-    `;
-
-    res.json({ message: "Thêm thành công" });
-  } catch (err) {
-    res.status(500).send(err);
-  }
-});
-
-/* ========================
-   LẤY DANH SÁCH
-======================== */
-
+// ========================
+// GET ALL TRANSACTIONS
+// ========================
 app.get("/transactions", async (req, res) => {
-  try {
-    const result = await sql.query("SELECT * FROM Transactions");
-    res.json(result.recordset);
-  } catch (err) {
-    res.status(500).send(err);
-  }
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("*")
+    .order("transaction_date", { ascending: false });
+
+  if (error) return res.status(500).json(error);
+  res.json(data);
 });
 
-/* ========================
-   TÍNH TỔNG
-======================== */
+// ========================
+// ADD TRANSACTION
+// ========================
+app.post("/transactions", async (req, res) => {
+  const { type, amount, purpose, source, date } = req.body;
 
-app.get("/summary", async (req, res) => {
-  try {
-    const result = await sql.query(`
-      SELECT 
-        SUM(CASE WHEN Type = N'Thu' THEN Amount ELSE 0 END) AS TotalThu,
-        SUM(CASE WHEN Type = N'Chi' THEN Amount ELSE 0 END) AS TotalChi
-      FROM Transactions
-    `);
+  const { error } = await supabase.from("transactions").insert([
+    {
+      type,
+      amount,
+      purpose,
+      source,
+      transaction_date: date,
+    },
+  ]);
 
-    res.json(result.recordset[0]);
-  } catch (err) {
-    res.status(500).send(err);
-  }
+  if (error) return res.status(500).json(error);
+  res.json({ message: "Thêm thành công" });
 });
 
-app.get("/balance-by-source", async (req, res) => {
-  try {
-    const result = await sql.query(`
-      SELECT 
-        Source,
-        SUM(CASE WHEN Type = N'Thu' THEN Amount ELSE -Amount END) AS Balance
-      FROM Transactions
-      GROUP BY Source
-    `);
-
-    res.json(result.recordset);
-  } catch (err) {
-    res.status(500).send("Server Error");
-  }
-});
-
-/* ========================
-   DELETE
-======================== */
-
+// ========================
+// DELETE
+// ========================
 app.delete("/transactions/:id", async (req, res) => {
-  try {
-    await sql.query`
-      DELETE FROM Transactions WHERE Id = ${req.params.id}
-    `;
-    res.json({ message: "Deleted successfully" });
-  } catch (err) {
-    res.status(500).send("Server Error");
-  }
+  const { error } = await supabase
+    .from("transactions")
+    .delete()
+    .eq("id", req.params.id);
+
+  if (error) return res.status(500).json(error);
+  res.json({ message: "Deleted successfully" });
 });
 
-/* ========================
-   UPDATE
-======================== */
-
+// ========================
+// UPDATE
+// ========================
 app.put("/transactions/:id", async (req, res) => {
-  try {
-    const { type, amount, purpose, source, date } = req.body;
+  const { type, amount, purpose, source, date } = req.body;
 
-    await sql.query`
-      UPDATE Transactions
-      SET Type = ${type},
-          Amount = ${amount},
-          Purpose = ${purpose},
-          Source = ${source},
-          TransactionDate = ${date}
-      WHERE Id = ${req.params.id}
-    `;
+  const { error } = await supabase
+    .from("transactions")
+    .update({
+      type,
+      amount,
+      purpose,
+      source,
+      transaction_date: date,
+    })
+    .eq("id", req.params.id);
 
-    res.json({ message: "Updated successfully" });
-  } catch (err) {
-    res.status(500).send("Server Error");
-  }
+  if (error) return res.status(500).json(error);
+  res.json({ message: "Updated successfully" });
 });
 
+// ========================
+// SUMMARY
+// ========================
+app.get("/summary", async (req, res) => {
+  const { data, error } = await supabase.from("transactions").select("*");
 
+  if (error) return res.status(500).json(error);
 
-app.listen(5000, () => {
-  console.log("🔥 Server chạy tại http://localhost:5000");
+  const totalThu = data
+    .filter(t => t.type === "Thu")
+    .reduce((sum, t) => sum + Number(t.amount), 0);
+
+  const totalChi = data
+    .filter(t => t.type === "Chi")
+    .reduce((sum, t) => sum + Number(t.amount), 0);
+
+  res.json({ totalThu, totalChi });
+});
+
+// ========================
+// BALANCE BY SOURCE
+// ========================
+app.get("/balance-by-source", async (req, res) => {
+  const { data, error } = await supabase.from("transactions").select("*");
+
+  if (error) return res.status(500).json(error);
+
+  const result = {};
+
+  data.forEach(t => {
+    if (!result[t.source]) result[t.source] = 0;
+
+    if (t.type === "Thu") result[t.source] += Number(t.amount);
+    else result[t.source] -= Number(t.amount);
+  });
+
+  res.json(result);
+});
+
+// ========================
+// PORT (QUAN TRỌNG)
+// ========================
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log("🔥 Server running on port " + PORT);
 });
